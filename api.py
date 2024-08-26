@@ -57,13 +57,13 @@ def preprocess_image(image_path, model):
     return normalized_embedding
 
 # Compute and insert embeddings into Milvus
-def insert_embeddings(collection, model, image_folder, batch_size=100):
+def insert_embeddings(collection, model, image_folder, batch_size=200):  # Larger batch size for more efficient insertion
     image_paths = [os.path.join(image_folder, f) for f in os.listdir(image_folder) if f.endswith(('.jpg', '.jpeg', '.png'))]
     embeddings = []
     image_ids = []
     words = []
     start_time = time.time()
-    with ThreadPoolExecutor() as executor:
+    with ThreadPoolExecutor(max_workers=12) as executor:  # Increase the number of workers for better parallelism
         future_to_path = {executor.submit(preprocess_image, path, model): path for path in image_paths}
         for i, future in enumerate(as_completed(future_to_path)):
             embedding = future.result()
@@ -128,7 +128,7 @@ def display_similar_images(results, image_folder):
 def main():
     collection = connect_to_milvus()
     model = load_model()
-    image_folder = r"C:\Users\user\Pictures\Similarity\test"
+    image_folder = r"C:\Users\user\Pictures\db_teeth_"
     insert_embeddings(collection, model, image_folder)
     query_image = select_image()
     if query_image:
