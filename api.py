@@ -19,7 +19,7 @@ import time
 
 # Connect to Milvus and set up the collection
 def connect_to_milvus():
-    connections.connect(alias="default", host='127.0.0.1', port="19530")
+    connections.connect(alias="default", host='localhost', port="19530",timeout=10)
     fields = [
         FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=False),
         FieldSchema(name="words", dtype=DataType.VARCHAR, max_length=50),
