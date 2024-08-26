@@ -19,10 +19,10 @@ import time
 
 # Connect to Milvus and set up the collection
 def connect_to_milvus():
-    connections.connect(alias="default", host='localhost', port="19530",timeout=30)
+    connections.connect(alias="default", host='localhost', port="19530", timeout=30)
     fields = [
-        FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=False),
-        FieldSchema(name="words", dtype=DataType.VARCHAR, max_length=50),
+        FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=True),
+        FieldSchema(name="words", dtype=DataType.STRING, max_length=50),  # Utilisez STRING au lieu de VARCHAR
         FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=512)
     ]
     schema = CollectionSchema(fields, description="Image similarity search")
@@ -128,7 +128,7 @@ def display_similar_images(results, image_folder):
 def main():
     collection = connect_to_milvus()
     model = load_model()
-    image_folder = r"C:\Users\user\Pictures\db_teeth_"
+    image_folder = r"C:\Users\user\Pictures\db_teeth_"  # Assurez-vous que ce chemin est correct
     insert_embeddings(collection, model, image_folder)
     query_image = select_image()
     if query_image:
