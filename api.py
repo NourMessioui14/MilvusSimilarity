@@ -56,28 +56,25 @@ def preprocess_image(image_path, model):
     return normalized_embedding
 
 # Compute and insert embeddings into Milvus
-def insert_embeddings(collection, model, image_folder, batch_size=200):  # Larger batch size for more efficient insertion
+def insert_embeddings(collection, model, image_folder, batch_size=200):
     image_paths = [os.path.join(image_folder, f) for f in os.listdir(image_folder) if f.endswith(('.jpg', '.jpeg', '.png'))]
     embeddings = []
     image_ids = []
-    words = []
     start_time = time.time()
-    with ThreadPoolExecutor(max_workers=12) as executor:  # Increase the number of workers for better parallelism
+    with ThreadPoolExecutor(max_workers=12) as executor:
         future_to_path = {executor.submit(preprocess_image, path, model): path for path in image_paths}
         for i, future in enumerate(as_completed(future_to_path)):
             embedding = future.result()
             if embedding is not None:
                 embeddings.append(embedding)
                 image_ids.append(i)
-                words.append(os.path.basename(future_to_path[future]).split('.')[0])  # Use the image filename (without extension) as the word
             if len(embeddings) >= batch_size:
-                collection.insert([image_ids, words, embeddings])
+                collection.insert([embeddings])
                 embeddings = []
                 image_ids = []
-                words = []
                 print(f"Batch {i // batch_size} inserted.")
     if embeddings:
-        collection.insert([image_ids, words, embeddings])
+        collection.insert([embeddings])
     collection.flush()
     print(f"Total time for insertion: {time.time() - start_time} seconds")
 
@@ -91,8 +88,7 @@ def search_similar_images(collection, query_image_path, model, top_k=5):
             data=[query_embedding], 
             anns_field="embedding", 
             param=search_params, 
-            limit=top_k,
-            output_fields=["words"]
+            limit=top_k
         )
         return results[0]
     else:
