@@ -1,5 +1,4 @@
 import os
-import subprocess
 import numpy as np
 import torch
 import torchvision.models as models
@@ -13,7 +12,9 @@ from pymilvus import (
     Collection,
     utility
 )
+import argparse
 import matplotlib.pyplot as plt
+from tkinter import Tk, filedialog
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
@@ -94,45 +95,59 @@ def search_similar_images(collection, query_image_path, model, top_k=5):
             limit=top_k,
             output_fields=["words"]
         )
-        # Print the results for debugging
+        
         print("Search results:")
         for result in results[0]:
-            print(f"ID: {result.id}, Distance: {result.distance}, Words: {result.entity.get('words')}")
+            image_name = result.entity.get('words') + '.jpg'
+            distance = result.distance
+            print(f"Image Name: {image_name}, Distance: {distance:.2f}")
+            
         return results[0]
     else:
         print("Query image could not be processed.")
         return []
 
-# Select an image file using dialog
-def select_image_with_dialog():
-    try:
-        # Call dialog to select an image file
-        result = subprocess.run(
-            ['dialog', '--title', 'Select an Image', '--fselect', '/home/', '15', '50'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        image_path = result.stdout.strip()
-        if os.path.isfile(image_path):
-            return image_path
-        else:
-            print("No valid image file selected.")
-            return None
-    except FileNotFoundError:
-        print("Dialog command not found. Please install dialog.")
-        return None
+# Select an image file using a file dialog
+def select_image():
+    Tk().withdraw()
+    file_path = filedialog.askopenfilename(
+        title="Select an image",
+        filetypes=[("Image files", "*.jpg;*.jpeg;*.png")]
+    )
+    return file_path
 
-# Display the similar images using Matplotlib
+def select_image_with_dialog():
+    # This method replaces the Tkinter-based dialog with a command-line argument
+    parser = argparse.ArgumentParser(description="Image similarity search with Milvus")
+    parser.add_argument('query_image', type=str, help="Path to the query image")
+    args = parser.parse_args()
+    return args.query_image
+
+def main():
+    # Connect to Milvus and load model
+    collection = connect_to_milvus()
+    model = load_model()
+    
+    # Insert embeddings into Milvus
+    image_folder = "/home/nour/MilvusSimilarity/db_teeth_"
+    insert_embeddings(collection, model, image_folder)
+    
+    # Get the query image path from command-line argument
+    query_image = select_image_with_dialog()
+    if query_image:
+        results = search_similar_images(collection, query_image, model)
+        if results:
+            print(f"Displaying {len(results)} similar images...")
+            # Display similar images
+            display_similar_images(results, image_folder)
+        else:
+            print("No similar images found.")
+    else:
+        print("No image selected.")
+
 def display_similar_images(results, image_folder):
     num_images = len(results)
-    if num_images == 0:
-        print("No similar images found.")
-        return
-    
     fig, axes = plt.subplots(1, num_images, figsize=(15, 5))
-    if num_images == 1:
-        axes = [axes]
     for ax, result in zip(axes, results):
         image_path = os.path.join(image_folder, f"{result.entity.get('words')}.jpg")
         if os.path.exists(image_path):
@@ -144,22 +159,6 @@ def display_similar_images(results, image_folder):
             ax.text(0.5, 0.5, 'Image not found', horizontalalignment='center', verticalalignment='center', fontsize=12)
             ax.axis('off')
     plt.show()
-
-def main():
-    collection = connect_to_milvus()
-    model = load_model()
-    image_folder = "/home/nour/MilvusSimilarity/db_teeth_"
-    insert_embeddings(collection, model, image_folder)
-    
-    query_image = select_image_with_dialog()
-    if query_image:
-        results = search_similar_images(collection, query_image, model)
-        if results:
-            display_similar_images(results, image_folder)
-        else:
-            print("No similar images found.")
-    else:
-        print("No image selected.")
 
 if __name__ == "__main__":
     main()
