@@ -23,7 +23,7 @@ def connect_to_milvus():
     fields = [
         FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=True),
         FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=512),
-        FieldSchema(name="words", dtype=DataType.VARCHAR, max_length=255)  # Use VARCHAR instead of STRING
+        FieldSchema(name="words", dtype=DataType.VARCHAR, max_length=255)
     ]
     schema = CollectionSchema(fields, description="Image similarity search")
     collection_name = "image_similarity"
@@ -73,14 +73,14 @@ def insert_embeddings(collection, model, image_folder, batch_size=200):  # Large
                 words.append(os.path.basename(future_to_path[future]).split('.')[0])  # Use the image filename (without extension) as the word
             if len(embeddings) >= batch_size:
                 # Ensure the number of lists and their order match the schema
-                collection.insert([image_ids, words, embeddings])
+                collection.insert([image_ids, embeddings, words])
                 embeddings = []
                 image_ids = []
                 words = []
                 print(f"Batch {i // batch_size} inserted.")
     if embeddings:
         # Ensure the number of lists and their order match the schema
-        collection.insert([image_ids, words, embeddings])
+        collection.insert([image_ids, embeddings, words])
     collection.flush()
     print(f"Total time for insertion: {time.time() - start_time} seconds")
 
