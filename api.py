@@ -1,4 +1,5 @@
 import os
+import subprocess
 import numpy as np
 import torch
 import torchvision.models as models
@@ -12,7 +13,6 @@ from pymilvus import (
     Collection,
     utility
 )
-import argparse
 import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
@@ -57,24 +57,26 @@ def preprocess_image(image_path, model):
     return normalized_embedding
 
 # Compute and insert embeddings into Milvus
-def insert_embeddings(collection, model, image_folder, batch_size=200):
+def insert_embeddings(collection, model, image_folder, batch_size=200):  # Larger batch size for more efficient insertion
     image_paths = [os.path.join(image_folder, f) for f in os.listdir(image_folder) if f.endswith(('.jpg', '.jpeg', '.png'))]
     embeddings = []
     words = []
     start_time = time.time()
-    with ThreadPoolExecutor(max_workers=12) as executor:
+    with ThreadPoolExecutor(max_workers=12) as executor:  # Increase the number of workers for better parallelism
         future_to_path = {executor.submit(preprocess_image, path, model): path for path in image_paths}
         for i, future in enumerate(as_completed(future_to_path)):
             embedding = future.result()
             if embedding is not None:
                 embeddings.append(embedding)
-                words.append(os.path.basename(future_to_path[future]).split('.')[0])
+                words.append(os.path.basename(future_to_path[future]).split('.')[0])  # Use the image filename (without extension) as the word
             if len(embeddings) >= batch_size:
+                # Insert data as two lists: embeddings and words
                 collection.insert([embeddings, words])
                 embeddings = []
                 words = []
                 print(f"Batch {i // batch_size} inserted.")
     if embeddings:
+        # Insert remaining data
         collection.insert([embeddings, words])
     collection.flush()
     print(f"Total time for insertion: {time.time() - start_time} seconds")
@@ -92,15 +94,45 @@ def search_similar_images(collection, query_image_path, model, top_k=5):
             limit=top_k,
             output_fields=["words"]
         )
+        # Print the results for debugging
+        print("Search results:")
+        for result in results[0]:
+            print(f"ID: {result.id}, Distance: {result.distance}, Words: {result.entity.get('words')}")
         return results[0]
     else:
         print("Query image could not be processed.")
         return []
 
+# Select an image file using dialog
+def select_image_with_dialog():
+    try:
+        # Call dialog to select an image file
+        result = subprocess.run(
+            ['dialog', '--title', 'Select an Image', '--fselect', '/home/', '15', '50'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        image_path = result.stdout.strip()
+        if os.path.isfile(image_path):
+            return image_path
+        else:
+            print("No valid image file selected.")
+            return None
+    except FileNotFoundError:
+        print("Dialog command not found. Please install dialog.")
+        return None
+
 # Display the similar images using Matplotlib
 def display_similar_images(results, image_folder):
     num_images = len(results)
+    if num_images == 0:
+        print("No similar images found.")
+        return
+    
     fig, axes = plt.subplots(1, num_images, figsize=(15, 5))
+    if num_images == 1:
+        axes = [axes]
     for ax, result in zip(axes, results):
         image_path = os.path.join(image_folder, f"{result.entity.get('words')}.jpg")
         if os.path.exists(image_path):
@@ -114,21 +146,16 @@ def display_similar_images(results, image_folder):
     plt.show()
 
 def main():
-    # Set up argparse
-    parser = argparse.ArgumentParser(description="Image similarity search using Milvus")
-    parser.add_argument('image_path', type=str, help="Path to the image file for similarity search")
-    parser.add_argument('--image_folder', type=str, default="/home/nour/MilvusSimilarity/db_teeth_", help="Folder containing images to index")
-    args = parser.parse_args()
-
     collection = connect_to_milvus()
     model = load_model()
-    insert_embeddings(collection, model, args.image_folder)
+    image_folder = "/home/nour/MilvusSimilarity/db_teeth_"
+    insert_embeddings(collection, model, image_folder)
     
-    query_image = args.image_path
+    query_image = select_image_with_dialog()
     if query_image:
         results = search_similar_images(collection, query_image, model)
         if results:
-            display_similar_images(results, args.image_folder)
+            display_similar_images(results, image_folder)
         else:
             print("No similar images found.")
     else:
