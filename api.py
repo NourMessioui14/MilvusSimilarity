@@ -1,5 +1,4 @@
 import os
-import sys
 import numpy as np
 import torch
 import torchvision.models as models
@@ -13,6 +12,7 @@ from pymilvus import (
     Collection,
     utility
 )
+from tkinter import Tk, filedialog
 import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
@@ -23,7 +23,7 @@ def connect_to_milvus():
     fields = [
         FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=True),
         FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=512),
-        FieldSchema(name="words", dtype=DataType.STRING)  # Ensure this field is present
+        FieldSchema(name="words", dtype=DataType.VARCHAR, max_length=255)  # Use VARCHAR instead of STRING
     ]
     schema = CollectionSchema(fields, description="Image similarity search")
     collection_name = "image_similarity"
@@ -57,13 +57,13 @@ def preprocess_image(image_path, model):
     return normalized_embedding
 
 # Compute and insert embeddings into Milvus
-def insert_embeddings(collection, model, image_folder, batch_size=200):
+def insert_embeddings(collection, model, image_folder, batch_size=200):  # Larger batch size for more efficient insertion
     image_paths = [os.path.join(image_folder, f) for f in os.listdir(image_folder) if f.endswith(('.jpg', '.jpeg', '.png'))]
     embeddings = []
     image_ids = []
     words = []
     start_time = time.time()
-    with ThreadPoolExecutor(max_workers=12) as executor:
+    with ThreadPoolExecutor(max_workers=12) as executor:  # Increase the number of workers for better parallelism
         future_to_path = {executor.submit(preprocess_image, path, model): path for path in image_paths}
         for i, future in enumerate(as_completed(future_to_path)):
             embedding = future.result()
@@ -100,15 +100,19 @@ def search_similar_images(collection, query_image_path, model, top_k=5):
         print("Query image could not be processed.")
         return []
 
+# Select an image file
+def select_image():
+    Tk().withdraw()
+    file_path = filedialog.askopenfilename(
+        title="Select an image",
+        filetypes=[("Image files", "*.jpg;*.jpeg;*.png")]
+    )
+    return file_path
+
 # Display the similar images using Matplotlib
 def display_similar_images(results, image_folder):
     num_images = len(results)
-    if num_images == 0:
-        print("No images found.")
-        return
     fig, axes = plt.subplots(1, num_images, figsize=(15, 5))
-    if num_images == 1:
-        axes = [axes]  # Ensure axes is iterable if there's only one image
     for ax, result in zip(axes, results):
         image_path = os.path.join(image_folder, f"{result.entity.get('words')}.jpg")
         if os.path.exists(image_path):
@@ -122,15 +126,11 @@ def display_similar_images(results, image_folder):
     plt.show()
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python3 api.py <path_to_query_image>")
-        sys.exit(1)
-
     collection = connect_to_milvus()
     model = load_model()
     image_folder = "/home/nour/MilvusSimilarity/db_teeth_"
     insert_embeddings(collection, model, image_folder)
-    query_image = sys.argv[1]
+    query_image = select_image()
     if query_image:
         results = search_similar_images(collection, query_image, model)
         if results:
