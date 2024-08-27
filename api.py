@@ -60,7 +60,6 @@ def preprocess_image(image_path, model):
 def insert_embeddings(collection, model, image_folder, batch_size=200):  # Larger batch size for more efficient insertion
     image_paths = [os.path.join(image_folder, f) for f in os.listdir(image_folder) if f.endswith(('.jpg', '.jpeg', '.png'))]
     embeddings = []
-    image_ids = []
     words = []
     start_time = time.time()
     with ThreadPoolExecutor(max_workers=12) as executor:  # Increase the number of workers for better parallelism
@@ -69,18 +68,16 @@ def insert_embeddings(collection, model, image_folder, batch_size=200):  # Large
             embedding = future.result()
             if embedding is not None:
                 embeddings.append(embedding)
-                image_ids.append(i)
                 words.append(os.path.basename(future_to_path[future]).split('.')[0])  # Use the image filename (without extension) as the word
             if len(embeddings) >= batch_size:
-                # Ensure the number of lists and their order match the schema
-                collection.insert([image_ids, embeddings, words])
+                # Insert data as two lists: embeddings and words
+                collection.insert([embeddings, words])
                 embeddings = []
-                image_ids = []
                 words = []
                 print(f"Batch {i // batch_size} inserted.")
     if embeddings:
-        # Ensure the number of lists and their order match the schema
-        collection.insert([image_ids, embeddings, words])
+        # Insert remaining data
+        collection.insert([embeddings, words])
     collection.flush()
     print(f"Total time for insertion: {time.time() - start_time} seconds")
 
