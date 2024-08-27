@@ -127,7 +127,7 @@ def display_similar_images(results, image_folder):
 def main():
     collection = connect_to_milvus()
     model = load_model()
-    image_folder = r"C:\Users\user\Pictures\db_teeth_"  # Assurez-vous que ce chemin est correct
+    image_folder = "/home/nour/MilvusSimilarity/db_teeth_"
     insert_embeddings(collection, model, image_folder)
     query_image = select_image()
     if query_image:
