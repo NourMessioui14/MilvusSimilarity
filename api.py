@@ -12,7 +12,7 @@ from pymilvus import (
     Collection,
     utility
 )
-from tkinter import Tk, filedialog
+import argparse
 import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
@@ -57,26 +57,24 @@ def preprocess_image(image_path, model):
     return normalized_embedding
 
 # Compute and insert embeddings into Milvus
-def insert_embeddings(collection, model, image_folder, batch_size=200):  # Larger batch size for more efficient insertion
+def insert_embeddings(collection, model, image_folder, batch_size=200):
     image_paths = [os.path.join(image_folder, f) for f in os.listdir(image_folder) if f.endswith(('.jpg', '.jpeg', '.png'))]
     embeddings = []
     words = []
     start_time = time.time()
-    with ThreadPoolExecutor(max_workers=12) as executor:  # Increase the number of workers for better parallelism
+    with ThreadPoolExecutor(max_workers=12) as executor:
         future_to_path = {executor.submit(preprocess_image, path, model): path for path in image_paths}
         for i, future in enumerate(as_completed(future_to_path)):
             embedding = future.result()
             if embedding is not None:
                 embeddings.append(embedding)
-                words.append(os.path.basename(future_to_path[future]).split('.')[0])  # Use the image filename (without extension) as the word
+                words.append(os.path.basename(future_to_path[future]).split('.')[0])
             if len(embeddings) >= batch_size:
-                # Insert data as two lists: embeddings and words
                 collection.insert([embeddings, words])
                 embeddings = []
                 words = []
                 print(f"Batch {i // batch_size} inserted.")
     if embeddings:
-        # Insert remaining data
         collection.insert([embeddings, words])
     collection.flush()
     print(f"Total time for insertion: {time.time() - start_time} seconds")
@@ -99,15 +97,6 @@ def search_similar_images(collection, query_image_path, model, top_k=5):
         print("Query image could not be processed.")
         return []
 
-# Select an image file
-def select_image():
-    Tk().withdraw()
-    file_path = filedialog.askopenfilename(
-        title="Select an image",
-        filetypes=[("Image files", "*.jpg;*.jpeg;*.png")]
-    )
-    return file_path
-
 # Display the similar images using Matplotlib
 def display_similar_images(results, image_folder):
     num_images = len(results)
@@ -125,15 +114,21 @@ def display_similar_images(results, image_folder):
     plt.show()
 
 def main():
+    # Set up argparse
+    parser = argparse.ArgumentParser(description="Image similarity search using Milvus")
+    parser.add_argument('image_path', type=str, help="Path to the image file for similarity search")
+    parser.add_argument('--image_folder', type=str, default="/home/nour/MilvusSimilarity/db_teeth_", help="Folder containing images to index")
+    args = parser.parse_args()
+
     collection = connect_to_milvus()
     model = load_model()
-    image_folder = "/home/nour/MilvusSimilarity/db_teeth_"
-    insert_embeddings(collection, model, image_folder)
-    query_image = select_image()
+    insert_embeddings(collection, model, args.image_folder)
+    
+    query_image = args.image_path
     if query_image:
         results = search_similar_images(collection, query_image, model)
         if results:
-            display_similar_images(results, image_folder)
+            display_similar_images(results, args.image_folder)
         else:
             print("No similar images found.")
     else:
