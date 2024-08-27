@@ -22,7 +22,8 @@ def connect_to_milvus():
     connections.connect(alias="default", host='localhost', port="19530", timeout=30)
     fields = [
         FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=True),
-        FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=512)
+        FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=512),
+        FieldSchema(name="words", dtype=DataType.STRING)  # Ensure this field is present
     ]
     schema = CollectionSchema(fields, description="Image similarity search")
     collection_name = "image_similarity"
@@ -60,6 +61,7 @@ def insert_embeddings(collection, model, image_folder, batch_size=200):
     image_paths = [os.path.join(image_folder, f) for f in os.listdir(image_folder) if f.endswith(('.jpg', '.jpeg', '.png'))]
     embeddings = []
     image_ids = []
+    words = []
     start_time = time.time()
     with ThreadPoolExecutor(max_workers=12) as executor:
         future_to_path = {executor.submit(preprocess_image, path, model): path for path in image_paths}
@@ -68,13 +70,15 @@ def insert_embeddings(collection, model, image_folder, batch_size=200):
             if embedding is not None:
                 embeddings.append(embedding)
                 image_ids.append(i)
+                words.append(os.path.basename(future_to_path[future]).split('.')[0])  # Use the image filename (without extension) as the word
             if len(embeddings) >= batch_size:
-                collection.insert([embeddings])
+                collection.insert([image_ids, words, embeddings])
                 embeddings = []
                 image_ids = []
+                words = []
                 print(f"Batch {i // batch_size} inserted.")
     if embeddings:
-        collection.insert([embeddings])
+        collection.insert([image_ids, words, embeddings])
     collection.flush()
     print(f"Total time for insertion: {time.time() - start_time} seconds")
 
@@ -88,7 +92,8 @@ def search_similar_images(collection, query_image_path, model, top_k=5):
             data=[query_embedding], 
             anns_field="embedding", 
             param=search_params, 
-            limit=top_k
+            limit=top_k,
+            output_fields=["words"]
         )
         return results[0]
     else:
@@ -98,7 +103,12 @@ def search_similar_images(collection, query_image_path, model, top_k=5):
 # Display the similar images using Matplotlib
 def display_similar_images(results, image_folder):
     num_images = len(results)
+    if num_images == 0:
+        print("No images found.")
+        return
     fig, axes = plt.subplots(1, num_images, figsize=(15, 5))
+    if num_images == 1:
+        axes = [axes]  # Ensure axes is iterable if there's only one image
     for ax, result in zip(axes, results):
         image_path = os.path.join(image_folder, f"{result.entity.get('words')}.jpg")
         if os.path.exists(image_path):
@@ -132,4 +142,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
