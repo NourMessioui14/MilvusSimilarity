@@ -72,12 +72,14 @@ def insert_embeddings(collection, model, image_folder, batch_size=200):  # Large
                 image_ids.append(i)
                 words.append(os.path.basename(future_to_path[future]).split('.')[0])  # Use the image filename (without extension) as the word
             if len(embeddings) >= batch_size:
+                # Ensure the number of lists and their order match the schema
                 collection.insert([image_ids, words, embeddings])
                 embeddings = []
                 image_ids = []
                 words = []
                 print(f"Batch {i // batch_size} inserted.")
     if embeddings:
+        # Ensure the number of lists and their order match the schema
         collection.insert([image_ids, words, embeddings])
     collection.flush()
     print(f"Total time for insertion: {time.time() - start_time} seconds")
