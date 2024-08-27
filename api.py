@@ -1,4 +1,5 @@
 import os
+import sys
 import numpy as np
 import torch
 import torchvision.models as models
@@ -12,7 +13,6 @@ from pymilvus import (
     Collection,
     utility
 )
-from tkinter import Tk, filedialog
 import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
@@ -95,15 +95,6 @@ def search_similar_images(collection, query_image_path, model, top_k=5):
         print("Query image could not be processed.")
         return []
 
-# Select an image file
-def select_image():
-    Tk().withdraw()
-    file_path = filedialog.askopenfilename(
-        title="Select an image",
-        filetypes=[("Image files", "*.jpg;*.jpeg;*.png")]
-    )
-    return file_path
-
 # Display the similar images using Matplotlib
 def display_similar_images(results, image_folder):
     num_images = len(results)
@@ -121,11 +112,15 @@ def display_similar_images(results, image_folder):
     plt.show()
 
 def main():
+    if len(sys.argv) != 2:
+        print("Usage: python3 api.py <path_to_query_image>")
+        sys.exit(1)
+
     collection = connect_to_milvus()
     model = load_model()
     image_folder = "/home/nour/MilvusSimilarity/db_teeth_"
     insert_embeddings(collection, model, image_folder)
-    query_image = select_image()
+    query_image = sys.argv[1]
     if query_image:
         results = search_similar_images(collection, query_image, model)
         if results:
@@ -137,3 +132,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
